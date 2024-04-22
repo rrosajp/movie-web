@@ -55,6 +55,10 @@ export function CaptionCue({
         color: styling.color,
         fontSize: `${(1.5 * styling.size).toFixed(2)}em`,
         backgroundColor: `rgba(0,0,0,${styling.backgroundOpacity.toFixed(2)})`,
+        backdropFilter:
+          styling.backgroundBlur !== 0
+            ? `blur(${Math.floor(styling.backgroundBlur * 64)}px)`
+            : "none",
       }}
     >
       <span
@@ -63,7 +67,7 @@ export function CaptionCue({
         dangerouslySetInnerHTML={{
           __html: parsedHtml,
         }}
-        dir="auto"
+        dir="ltr"
       />
     </p>
   );
@@ -79,15 +83,15 @@ export function SubtitleRenderer() {
 
   const parsedCaptions = useMemo(
     () => (srtData ? parseSubtitles(srtData, language) : []),
-    [srtData, language]
+    [srtData, language],
   );
 
   const visibileCaptions = useMemo(
     () =>
       parsedCaptions.filter(({ start, end }) =>
-        captionIsVisible(start, end, delay, videoTime)
+        captionIsVisible(start, end, delay, videoTime),
       ),
-    [parsedCaptions, videoTime, delay]
+    [parsedCaptions, videoTime, delay],
   );
 
   return (

@@ -9,9 +9,10 @@ import {
 } from "react";
 
 import { SubtitleStyling } from "@/stores/subtitles";
+import { usePreviewThemeStore } from "@/stores/theme";
 
 export function useDerived<T>(
-  initial: T
+  initial: T,
 ): [T, Dispatch<SetStateAction<T>>, () => void, boolean] {
   const [overwrite, setOverwrite] = useState<T | undefined>(undefined);
   useEffect(() => {
@@ -19,14 +20,14 @@ export function useDerived<T>(
   }, [initial]);
   const changed = useMemo(
     () => !isEqual(overwrite, initial) && overwrite !== undefined,
-    [overwrite, initial]
+    [overwrite, initial],
   );
   const setter = useCallback<Dispatch<SetStateAction<T>>>(
     (inp) => {
       if (!(inp instanceof Function)) setOverwrite(inp);
-      else setOverwrite((s) => inp(s ?? initial));
+      else setOverwrite((s) => inp(s !== undefined ? s : initial));
     },
-    [initial, setOverwrite]
+    [initial, setOverwrite],
   );
   const data = overwrite === undefined ? initial : overwrite;
 
@@ -48,13 +49,20 @@ export function useSettingsState(
         colorB: string;
         icon: string;
       }
-    | undefined
+    | undefined,
+  enableThumbnails: boolean,
+  enableAutoplay: boolean,
 ) {
   const [proxyUrlsState, setProxyUrls, resetProxyUrls, proxyUrlsChanged] =
     useDerived(proxyUrls);
   const [backendUrlState, setBackendUrl, resetBackendUrl, backendUrlChanged] =
     useDerived(backendUrl);
   const [themeState, setTheme, resetTheme, themeChanged] = useDerived(theme);
+  const setPreviewTheme = usePreviewThemeStore((s) => s.setPreviewTheme);
+  const resetPreviewTheme = useCallback(
+    () => setPreviewTheme(theme),
+    [setPreviewTheme, theme],
+  );
   const [
     appLanguageState,
     setAppLanguage,
@@ -71,15 +79,30 @@ export function useSettingsState(
   ] = useDerived(deviceName);
   const [profileState, setProfileState, resetProfile, profileChanged] =
     useDerived(profile);
+  const [
+    enableThumbnailsState,
+    setEnableThumbnailsState,
+    resetEnableThumbnails,
+    enableThumbnailsChanged,
+  ] = useDerived(enableThumbnails);
+  const [
+    enableAutoplayState,
+    setEnableAutoplayState,
+    resetEnableAutoplay,
+    enableAutoplayChanged,
+  ] = useDerived(enableAutoplay);
 
   function reset() {
     resetTheme();
+    resetPreviewTheme();
     resetAppLanguage();
     resetSubStyling();
     resetProxyUrls();
     resetBackendUrl();
     resetDeviceName();
     resetProfile();
+    resetEnableThumbnails();
+    resetEnableAutoplay();
   }
 
   const changed =
@@ -89,7 +112,9 @@ export function useSettingsState(
     deviceNameChanged ||
     backendUrlChanged ||
     proxyUrlsChanged ||
-    profileChanged;
+    profileChanged ||
+    enableThumbnailsChanged ||
+    enableAutoplayChanged;
 
   return {
     reset,
@@ -128,6 +153,16 @@ export function useSettingsState(
       state: profileState,
       set: setProfileState,
       changed: profileChanged,
+    },
+    enableThumbnails: {
+      state: enableThumbnailsState,
+      set: setEnableThumbnailsState,
+      changed: enableThumbnailsChanged,
+    },
+    enableAutoplay: {
+      state: enableAutoplayState,
+      set: setEnableAutoplayState,
+      changed: enableAutoplayChanged,
     },
   };
 }

@@ -5,6 +5,8 @@ import { convertSubtitlesToObjectUrl } from "@/components/player/utils/captions"
 import { playerStatus } from "@/stores/player/slices/source";
 import { usePlayerStore } from "@/stores/player/store";
 
+import { useInitializeSource } from "../hooks/useInitializePlayer";
+
 // initialize display interface
 function useDisplayInterface() {
   const display = usePlayerStore((s) => s.display);
@@ -68,7 +70,7 @@ function VideoElement() {
   const language = usePlayerStore((s) => s.caption.selected?.language);
   const trackObjectUrl = useObjectUrl(
     () => (srtData ? convertSubtitlesToObjectUrl(srtData) : null),
-    [srtData]
+    [srtData],
   );
 
   // report video element to display interface
@@ -112,6 +114,7 @@ function VideoElement() {
 export function VideoContainer() {
   const show = useShouldShowVideoElement();
   useDisplayInterface();
+  useInitializeSource();
 
   if (!show) return null;
   return <VideoElement />;

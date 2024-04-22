@@ -13,13 +13,14 @@ export type TMDBEpisodeShort = {
   title: string;
   id: number;
   episode_number: number;
+  air_date: string;
 };
 
 export type TMDBMediaResult = {
   title: string;
   poster?: string;
   id: number;
-  original_release_year?: number;
+  original_release_date?: Date;
   object_type: TMDBContentTypes;
   seasons?: TMDBSeasonShort[];
 };

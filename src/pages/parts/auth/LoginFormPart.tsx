@@ -52,13 +52,16 @@ export function LoginFormPart(props: LoginFormPartProps) {
         throw err;
       }
 
+      if (!account)
+        throw new Error(t("auth.login.validationError") ?? undefined);
+
       await importData(account, progressItems, bookmarkItems);
 
       await restore(account);
 
       props.onLogin?.();
     },
-    [props, login, restore, t]
+    [props, login, restore, t],
   );
 
   return (
@@ -74,6 +77,7 @@ export function LoginFormPart(props: LoginFormPartProps) {
           name="username"
           onChange={setMnemonic}
           placeholder={t("auth.login.passphrasePlaceholder") ?? undefined}
+          passwordToggleable
         />
         <AuthInputBox
           label={t("auth.deviceNameLabel") ?? undefined}

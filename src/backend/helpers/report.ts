@@ -1,13 +1,19 @@
 import { ScrapeMedia } from "@movie-web/providers";
+import { nanoid } from "nanoid";
 import { ofetch } from "ofetch";
 import { useCallback } from "react";
 
+import { isExtensionActiveCached } from "@/backend/extension/messaging";
 import { ScrapingItems, ScrapingSegment } from "@/hooks/useProviderScrape";
+import { BACKEND_URL } from "@/setup/constants";
+import { useAuthStore } from "@/stores/auth";
 import { PlayerMeta } from "@/stores/player/slices/source";
 
 // for anybody who cares - these are anonymous metrics.
 // They are just used for figuring out if providers are broken or not
-const metricsEndpoint = "https://backend.movie-web.app/metrics/providers";
+const metricsEndpoint = `${BACKEND_URL}/metrics/providers`;
+const captchaMetricsEndpoint = `${BACKEND_URL}/metrics/captcha`;
+const batchId = () => nanoid(32);
 
 export type ProviderMetric = {
   tmdbId: string;
@@ -22,6 +28,15 @@ export type ProviderMetric = {
   fullError?: string;
 };
 
+export type ScrapeTool = "default" | "custom-proxy" | "extension";
+
+export function getScrapeTool(): ScrapeTool {
+  if (isExtensionActiveCached()) return "extension";
+  const hasProxySet = !!useAuthStore.getState().proxySet;
+  if (hasProxySet) return "custom-proxy";
+  return "default";
+}
+
 function getStackTrace(error: Error, lines: number) {
   const topMessage = error.toString();
   const stackTraceLines = (error.stack ?? "").split("\n", lines + 1);
@@ -30,10 +45,13 @@ function getStackTrace(error: Error, lines: number) {
 }
 
 export async function reportProviders(items: ProviderMetric[]): Promise<void> {
+  if (!BACKEND_URL) return;
   return ofetch(metricsEndpoint, {
     method: "POST",
     body: {
       items,
+      tool: getScrapeTool(),
+      batchId: batchId(),
     },
   });
 }
@@ -54,7 +72,7 @@ export function scrapeSourceOutputToProviderMetric(
   providerId: string,
   embedId: string | null,
   status: ProviderMetric["status"],
-  err: unknown | null
+  err: unknown | null,
 ): ProviderMetric {
   const episodeId = media.episode?.tmdbId;
   const seasonId = media.season?.tmdbId;
@@ -78,7 +96,7 @@ export function scrapeSourceOutputToProviderMetric(
 export function scrapeSegmentToProviderMetric(
   media: ScrapeMedia,
   providerId: string,
-  segment: ScrapingSegment
+  segment: ScrapingSegment,
 ): ProviderMetric | null {
   const status = segmentStatusMap[segment.status];
   if (!status) return null;
@@ -108,7 +126,7 @@ export function scrapeSegmentToProviderMetric(
 export function scrapePartsToProviderMetric(
   media: ScrapeMedia,
   order: ScrapingItems[],
-  sources: Record<string, ScrapingSegment>
+  sources: Record<string, ScrapingSegment>,
 ): ProviderMetric[] {
   const output: ProviderMetric[] = [];
 
@@ -133,8 +151,18 @@ export function scrapePartsToProviderMetric(
 export function useReportProviders() {
   const report = useCallback((items: ProviderMetric[]) => {
     if (items.length === 0) return;
-    reportProviders(items);
+    reportProviders(items).catch(() => {});
   }, []);
 
   return { report };
+}
+
+export function reportCaptchaSolve(success: boolean) {
+  if (!BACKEND_URL) return;
+  ofetch(captchaMetricsEndpoint, {
+    method: "POST",
+    body: {
+      success,
+    },
+  }).catch(() => {});
 }

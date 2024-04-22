@@ -51,7 +51,7 @@ export function Navigation(props: NavigationProps) {
             "fixed left-0 right-0 h-20 flex items-center",
             props.doBackground
               ? "bg-background-main border-b border-utils-divider border-opacity-50"
-              : null
+              : null,
           )}
         >
           {props.doBackground ? (
@@ -79,8 +79,11 @@ export function Navigation(props: NavigationProps) {
       >
         <div className={classNames("fixed left-0 right-0 flex items-center")}>
           <div className="px-7 py-5 relative z-[60] flex flex-1 items-center justify-between">
-            <div className="flex items-center space-x-3 pointer-events-auto">
-              <Link className="block tabbable rounded-full" to="/">
+            <div className="flex items-center space-x-1.5 ssm:space-x-3 pointer-events-auto">
+              <Link
+                className="block tabbable rounded-full text-xs ssm:text-base"
+                to="/"
+              >
                 <BrandPill clickable />
               </Link>
               <a

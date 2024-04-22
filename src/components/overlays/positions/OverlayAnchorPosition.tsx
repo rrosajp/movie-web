@@ -25,11 +25,11 @@ function useCalculatePositions() {
       setLeft(
         Math.min(
           buttonCenter - card.width / 2,
-          window.innerWidth - card.width - 30
-        )
+          window.innerWidth - card.width - 30,
+        ),
       );
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function OverlayAnchorPosition(props: AnchorPositionProps) {
         transform: `translateX(${left}px) translateY(${top}px)`,
       }}
       className={classNames([
-        "pointer-events-auto z-10 inline-block origin-top-left touch-none",
+        "[&>*]:pointer-events-auto z-10 flex dir-neutral:items-start rtl:justify-start ltr:justify-end dir-neutral:origin-top-left touch-none",
         props.className,
       ])}
     >

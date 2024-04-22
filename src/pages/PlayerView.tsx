@@ -1,9 +1,13 @@
 import { RunOutput } from "@movie-web/providers";
 import { useCallback, useEffect, useState } from "react";
-import { useHistory, useParams } from "react-router-dom";
-import { useEffectOnce } from "react-use";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import { useAsync } from "react-use";
 
-import { useCaptions } from "@/components/player/hooks/useCaptions";
 import { usePlayer } from "@/components/player/hooks/usePlayer";
 import { usePlayerMeta } from "@/components/player/hooks/usePlayerMeta";
 import { convertProviderCaption } from "@/components/player/utils/captions";
@@ -17,10 +21,11 @@ import { ScrapeErrorPart } from "@/pages/parts/player/ScrapeErrorPart";
 import { ScrapingPart } from "@/pages/parts/player/ScrapingPart";
 import { useLastNonPlayerLink } from "@/stores/history";
 import { PlayerMeta, playerStatus } from "@/stores/player/slices/source";
+import { needsOnboarding } from "@/utils/onboarding";
 import { parseTimestamp } from "@/utils/timestamp";
 
-export function PlayerView() {
-  const history = useHistory();
+export function RealPlayerView() {
+  const navigate = useNavigate();
   const params = useParams<{
     media: string;
     episode?: string;
@@ -41,7 +46,6 @@ export function PlayerView() {
   } = usePlayer();
   const { setPlayerMeta, scrapeMedia } = usePlayerMeta();
   const backUrl = useLastNonPlayerLink();
-  const { disable } = useCaptions();
 
   const paramsData = JSON.stringify({
     media: params.media,
@@ -55,12 +59,12 @@ export function PlayerView() {
   const metaChange = useCallback(
     (meta: PlayerMeta) => {
       if (meta?.type === "show")
-        history.push(
-          `/media/${params.media}/${meta.season?.tmdbId}/${meta.episode?.tmdbId}`
+        navigate(
+          `/media/${params.media}/${meta.season?.tmdbId}/${meta.episode?.tmdbId}`,
         );
-      else history.push(`/media/${params.media}`);
+      else navigate(`/media/${params.media}`);
     },
-    [history, params]
+    [navigate, params],
   );
 
   const playAfterScrape = useCallback(
@@ -74,7 +78,7 @@ export function PlayerView() {
         convertRunoutputToSource(out),
         convertProviderCaption(out.stream.captions),
         out.sourceId,
-        shouldStartFromBeginning ? 0 : startAt
+        shouldStartFromBeginning ? 0 : startAt,
       );
       setShouldStartFromBeginning(false);
     },
@@ -83,12 +87,8 @@ export function PlayerView() {
       startAtParam,
       shouldStartFromBeginning,
       setShouldStartFromBeginning,
-    ]
+    ],
   );
-
-  useEffectOnce(() => {
-    disable();
-  });
 
   return (
     <PlayerPart backUrl={backUrl} onMetaChange={metaChange}>
@@ -115,3 +115,26 @@ export function PlayerView() {
     </PlayerPart>
   );
 }
+
+export function PlayerView() {
+  const loc = useLocation();
+  const { loading, error, value } = useAsync(() => {
+    return needsOnboarding();
+  });
+
+  if (error) throw new Error("Failed to detect onboarding");
+  if (loading) return null;
+  if (value)
+    return (
+      <Navigate
+        replace
+        to={{
+          pathname: "/onboarding",
+          search: `redirect=${encodeURIComponent(loc.pathname)}`,
+        }}
+      />
+    );
+  return <RealPlayerView />;
+}
+
+export default PlayerView;

@@ -38,7 +38,7 @@ export function TMDBMediaToMediaType(type: TMDBContentTypes): MWMediaType {
 }
 
 export function TMDBMediaToMediaItemType(
-  type: TMDBContentTypes
+  type: TMDBContentTypes,
 ): MediaItem["type"] {
   if (type === TMDBContentTypes.MOVIE) return "movie";
   if (type === TMDBContentTypes.TV) return "show";
@@ -47,7 +47,7 @@ export function TMDBMediaToMediaItemType(
 
 export function formatTMDBMeta(
   media: TMDBMediaResult,
-  season?: TMDBSeasonMetaResult
+  season?: TMDBSeasonMetaResult,
 ): MWMediaMeta {
   const type = TMDBMediaToMediaType(media.object_type);
   let seasons: undefined | MWSeasonMeta[];
@@ -59,19 +59,19 @@ export function formatTMDBMeta(
           title: v.title,
           id: v.id.toString(),
           number: v.season_number,
-        })
+        }),
       );
   }
 
   return {
     title: media.title,
     id: media.id.toString(),
-    year: media.original_release_year?.toString(),
+    year: media.original_release_date?.getFullYear()?.toString(),
     poster: media.poster,
     type,
     seasons: seasons as any,
     seasonData: season
-      ? ({
+      ? {
           id: season.id.toString(),
           number: season.season_number,
           title: season.title,
@@ -81,8 +81,9 @@ export function formatTMDBMeta(
               id: v.id.toString(),
               number: v.episode_number,
               title: v.title,
+              air_date: v.air_date,
             })),
-        } as any)
+        }
       : (undefined as any),
   };
 }
@@ -93,7 +94,8 @@ export function formatTMDBMetaToMediaItem(media: TMDBMediaResult): MediaItem {
   return {
     title: media.title,
     id: media.id.toString(),
-    year: media.original_release_year ?? 0,
+    year: media.original_release_date?.getFullYear() ?? 0,
+    release_date: media.original_release_date,
     poster: media.poster,
     type,
   };
@@ -102,7 +104,7 @@ export function formatTMDBMetaToMediaItem(media: TMDBMediaResult): MediaItem {
 export function TMDBIdToUrlId(
   type: MWMediaType,
   tmdbId: string,
-  title: string
+  title: string,
 ) {
   return [
     "tmdb",
@@ -120,12 +122,12 @@ export function mediaItemToId(media: MediaItem): string {
   return TMDBIdToUrlId(
     mediaItemTypeToMediaType(media.type),
     media.id,
-    media.title
+    media.title,
   );
 }
 
 export function decodeTMDBId(
-  paramId: string
+  paramId: string,
 ): { id: string; type: MWMediaType } | null {
   const [prefix, type, id] = paramId.split("-", 3);
   if (prefix !== "tmdb") return null;
@@ -141,26 +143,47 @@ export function decodeTMDBId(
   };
 }
 
-const baseURL = "https://api.themoviedb.org/3";
+const tmdbBaseUrl1 = "https://api.themoviedb.org/3";
+const tmdbBaseUrl2 = "https://api.tmdb.org/3";
 
-const headers = {
+const apiKey = conf().TMDB_READ_API_KEY;
+
+const tmdbHeaders = {
   accept: "application/json",
-  Authorization: `Bearer ${conf().TMDB_READ_API_KEY}`,
+  Authorization: `Bearer ${apiKey}`,
 };
 
+function abortOnTimeout(timeout: number): AbortSignal {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeout);
+  return controller.signal;
+}
+
 async function get<T>(url: string, params?: object): Promise<T> {
-  const res = await mwFetch<any>(encodeURI(url), {
-    headers,
-    baseURL,
-    params: {
-      ...params,
-    },
-  });
-  return res;
+  if (!apiKey) throw new Error("TMDB API key not set");
+  try {
+    return await mwFetch<T>(encodeURI(url), {
+      headers: tmdbHeaders,
+      baseURL: tmdbBaseUrl1,
+      params: {
+        ...params,
+      },
+      signal: abortOnTimeout(5000),
+    });
+  } catch (err) {
+    return mwFetch<T>(encodeURI(url), {
+      headers: tmdbHeaders,
+      baseURL: tmdbBaseUrl2,
+      params: {
+        ...params,
+      },
+      signal: abortOnTimeout(30000),
+    });
+  }
 }
 
 export async function multiSearch(
-  query: string
+  query: string,
 ): Promise<(TMDBMovieSearchResult | TMDBShowSearchResult)[]> {
   const data = await get<TMDBSearchResult>("search/multi", {
     query,
@@ -172,13 +195,13 @@ export async function multiSearch(
   const results = data.results.filter(
     (r) =>
       r.media_type === TMDBContentTypes.MOVIE ||
-      r.media_type === TMDBContentTypes.TV
+      r.media_type === TMDBContentTypes.TV,
   );
   return results;
 }
 
 export async function generateQuickSearchMediaUrl(
-  query: string
+  query: string,
 ): Promise<string | undefined> {
   const data = await multiSearch(query);
   if (data.length === 0) return undefined;
@@ -189,7 +212,7 @@ export async function generateQuickSearchMediaUrl(
   return `/media/${TMDBIdToUrlId(
     TMDBMediaToMediaType(result.media_type),
     result.id.toString(),
-    title
+    title,
   )}`;
 }
 
@@ -198,12 +221,12 @@ type MediaDetailReturn<T extends TMDBContentTypes> =
   T extends TMDBContentTypes.MOVIE
     ? TMDBMovieData
     : T extends TMDBContentTypes.TV
-    ? TMDBShowData
-    : never;
+      ? TMDBShowData
+      : never;
 
 export function getMediaDetails<
   T extends TMDBContentTypes,
-  TReturn = MediaDetailReturn<T>
+  TReturn = MediaDetailReturn<T>,
 >(id: string, type: T): Promise<TReturn> {
   if (type === TMDBContentTypes.MOVIE) {
     return get<TReturn>(`/movie/${id}`, { append_to_response: "external_ids" });
@@ -215,23 +238,24 @@ export function getMediaDetails<
 }
 
 export function getMediaPoster(posterPath: string | null): string | undefined {
-  if (posterPath) return `https://image.tmdb.org/t/p/w185/${posterPath}`;
+  if (posterPath) return `https://image.tmdb.org/t/p/w342/${posterPath}`;
 }
 
 export async function getEpisodes(
   id: string,
-  season: number
+  season: number,
 ): Promise<TMDBEpisodeShort[]> {
   const data = await get<TMDBSeason>(`/tv/${id}/season/${season}`);
   return data.episodes.map((e) => ({
     id: e.id,
     episode_number: e.episode_number,
     title: e.name,
+    air_date: e.air_date,
   }));
 }
 
 export async function getMovieFromExternalId(
-  imdbId: string
+  imdbId: string,
 ): Promise<string | undefined> {
   const data = await get<ExternalIdMovieSearchResult>(`/find/${imdbId}`, {
     external_source: "imdb_id",
@@ -245,7 +269,7 @@ export async function getMovieFromExternalId(
 
 export function formatTMDBSearchResult(
   result: TMDBMovieSearchResult | TMDBShowSearchResult,
-  mediatype: TMDBContentTypes
+  mediatype: TMDBContentTypes,
 ): TMDBMediaResult {
   const type = TMDBMediaToMediaType(mediatype);
   if (type === MWMediaType.SERIES) {
@@ -254,7 +278,7 @@ export function formatTMDBSearchResult(
       title: show.name,
       poster: getMediaPoster(show.poster_path),
       id: show.id,
-      original_release_year: new Date(show.first_air_date).getFullYear(),
+      original_release_date: new Date(show.first_air_date),
       object_type: mediatype,
     };
   }
@@ -265,7 +289,7 @@ export function formatTMDBSearchResult(
     title: movie.title,
     poster: getMediaPoster(movie.poster_path),
     id: movie.id,
-    original_release_year: new Date(movie.release_date).getFullYear(),
+    original_release_date: new Date(movie.release_date),
     object_type: mediatype,
   };
 }
